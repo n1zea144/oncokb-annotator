@@ -49,7 +49,9 @@ func (o OncoKBAnnotatorService) AnnotateMutations(ctx context.Context, message *
 		return err
 	}
 
+	setOncoKBDataVersion(message, oncoKBResponse)
 	mapResponseToEvents(message.Events, oncoKBResponse)
+
 	return nil
 }
 
@@ -99,15 +101,16 @@ var variantClassToConsequence = map[string][]string{
 func getOncoKBRequestJSON(byProteinChangeURL bool, message *tt.TempoMessage) ([]byte, error) {
 	var oncoKBMutations []OncoKBMutationRequest
 	var proteinStart, proteinEnd int
+	var err error
 	for lc, ev := range message.Events {
 		var gID int
-		if len(*ev.HugoSymbol) == 0 {
-			gID, _ = strconv.Atoi(*ev.EntrezGeneId) // this should be an integer in protobuf def
+		if len(ev.HugoSymbol) == 0 {
+			gID, _ = strconv.Atoi(ev.EntrezGeneId) // this should be an integer in protobuf def
 		}
 		eIndex := strconv.Itoa(lc)
 		var consequence string
-		if consList, ok := variantClassToConsequence[strings.ToLower(*ev.VariantClassification)]; !ok {
-			return nil, fmt.Errorf("An unknown variant classification has been encountered: %s", *ev.VariantClassification)
+		if consList, ok := variantClassToConsequence[strings.ToLower(ev.VariantClassification)]; !ok {
+			return nil, fmt.Errorf("An unknown variant classification has been encountered: %s", ev.VariantClassification)
 		} else {
 			consequence = strings.Join(consList, "+")
 		}
@@ -117,23 +120,29 @@ func getOncoKBRequestJSON(byProteinChangeURL bool, message *tt.TempoMessage) ([]
 		// When we set start/end, we get differing results from the script, so lets not set them
 		// when the query is by protein change
 		if !byProteinChangeURL {
-			proteinStart = int(ev.StartPosition)
-			proteinEnd = int(ev.EndPosition)
+			proteinStart, err = strconv.Atoi(ev.StartPosition)
+			if err != nil {
+				return nil, fmt.Errorf("Cannot convert StartPosition to integer: %v", err)
+			}
+			proteinEnd, err = strconv.Atoi(ev.EndPosition)
+			if err != nil {
+				return nil, fmt.Errorf("Cannot convert StartPosition to integer: %v", err)
+			}
 		}
-		if len(*ev.HgvspShort) == 0 {
+		if len(ev.HgvspShort) == 0 {
 			return nil, fmt.Errorf("HGVS_Short is missing, cannot proceed")
 		}
 		request := OncoKBMutationRequest{
-			Alteration:  strings.TrimPrefix(*ev.HgvspShort, "p."), // strip leading "p.'
+			Alteration:  strings.TrimPrefix(ev.HgvspShort, "p."), // strip leading "p.'
 			Consequence: consequence,
 			Gene: Gene{
 				EntrezGeneID: gID,
-				HugoSymbol:   *ev.HugoSymbol,
+				HugoSymbol:   ev.HugoSymbol,
 			},
 			ID:              eIndex,
 			ProteinStart:    proteinStart,
 			ProteinEnd:      proteinEnd,
-			ReferenceGenome: *ev.NcbiBuild,
+			ReferenceGenome: ev.NcbiBuild,
 			TumorType:       message.OncotreeCode,
 		}
 		oncoKBMutations = append(oncoKBMutations, request)
@@ -162,6 +171,13 @@ func getOncoKBResponse(resp *http.Response) ([]OncoKBResponse, error) {
 		return nil, fmt.Errorf("Error reading OncoKB API response: %s", err)
 	}
 	return toReturn, nil
+}
+
+func setOncoKBDataVersion(message *tt.TempoMessage, resp []OncoKBResponse) {
+	for _, r := range resp {
+		message.OncokbDataVersion = r.DataVersion
+		break
+	}
 }
 
 func mapResponseToEvents(events []*tt.Event, resp []OncoKBResponse) {

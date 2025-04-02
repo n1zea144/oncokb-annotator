@@ -3,7 +3,6 @@ package tempo_databricks_gateway
 import (
 	"bufio"
 	"context"
-	"fmt"
 	"os"
 	"regexp"
 	"strings"
@@ -104,19 +103,13 @@ func getTempoMessage(t testing.TB, oncoMap map[string]string, fields []string) (
 	} else {
 		t.Logf("Cannot find oncotree code for patient %q", fields[6])
 	}
-	tm.Events[0].HgvspShort = &fields[7]
-	tm.Events[0].VariantClassification = &fields[5]
-	tm.Events[0].EntrezGeneId = &fields[1]
-	tm.Events[0].HugoSymbol = &fields[0]
-	_, err := fmt.Sscanf(fields[3], "%d", &tm.Events[0].StartPosition)
-	if err != nil {
-		return &tm, fmt.Errorf("Error extract start position from record: %v", err)
-	}
-	_, err = fmt.Sscanf(fields[4], "%d", &tm.Events[0].EndPosition)
-	if err != nil {
-		return &tm, fmt.Errorf("Error extract end position from record: %v", err)
-	}
-	tm.Events[0].NcbiBuild = &fields[2]
+	tm.Events[0].HgvspShort = fields[7]
+	tm.Events[0].VariantClassification = fields[5]
+	tm.Events[0].EntrezGeneId = fields[1]
+	tm.Events[0].HugoSymbol = fields[0]
+	tm.Events[0].StartPosition = fields[3]
+	tm.Events[0].EndPosition = fields[4]
+	tm.Events[0].NcbiBuild = fields[2]
 
 	return &tm, nil
 }
